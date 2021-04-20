@@ -5,45 +5,58 @@ namespace AddressParsing
 {
     public static class AddressParser
     {
-        private static readonly Regex StrasseHausnummer = new Regex(@"^([\D]*(?:[\d]*\.)*[\D]+\D)(\d+\s?[a-z]?)(?:\s?-\s?(\d+\s?[a-z]?))?(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex StiegeTuer = new Regex(@"(?:[/\s\\]{1})([a-zäöüß\d\s]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private const string InvalidFormatMessage = "Address is in an invalid format!";
+
+        private static readonly Regex StrasseHausnummer = new(@"^([\D]*(?:[\d]*\.)*[\D]+\D)(\d+\s?[a-z]?)(?:\s?-\s?(\d+\s?[a-z]?))?(.*)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex StiegeTuer = new(@"(?:[/\s\\]{1})([a-zäöüß\d\s]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static ResultAddress Parse(string inputString)
         {
-            var address = new ResultAddress();
-
             var strasseHausnummerMatch = StrasseHausnummer.Match(inputString);
 
             if (!strasseHausnummerMatch.Success)
-                throw new FormatException("Address is in an invalid format!");
+                throw new FormatException(InvalidFormatMessage);
 
-            address.Strasse = strasseHausnummerMatch.Groups[1].Value.Trim();
-            address.HausnummerVon = strasseHausnummerMatch.Groups[2].Value.Trim();
+            var strasse = strasseHausnummerMatch.Groups[1].Value.Trim();
+            var hausnummerVon = strasseHausnummerMatch.Groups[2].Value.Trim();
 
+            string? hausnummerBis = null;
             if (!string.IsNullOrWhiteSpace(strasseHausnummerMatch.Groups[3].Value))
-                address.HausnummerBis = strasseHausnummerMatch.Groups[3].Value.Trim();
+                hausnummerBis = strasseHausnummerMatch.Groups[3].Value.Trim();
 
             var stiegeTuerMatches = StiegeTuer.Matches(strasseHausnummerMatch.Groups[4].Value);
+
+            ResultAddress intermediateAddress = new(strasse, hausnummerVon, hausnummerBis);
+            if (stiegeTuerMatches.Count == 0)
+                return intermediateAddress;
+
+            return ParseExtendedAddress(intermediateAddress, stiegeTuerMatches);
+        }
+
+        private static ResultAddress ParseExtendedAddress(ResultAddress intermediateAddress, MatchCollection stiegeTuerMatches)
+        {
+            string? tuer;
+            string? stiege = null;
+            string? block = null;
+
             switch (stiegeTuerMatches.Count)
             {
                 case 1:
-                    address.Tuer = stiegeTuerMatches[0].Groups[1].Value.Trim();
+                    tuer = stiegeTuerMatches[0].Groups[1].Value.Trim();
                     break;
                 case 2:
-                    address.Stiege = stiegeTuerMatches[0].Groups[1].Value.Trim();
-                    address.Tuer = stiegeTuerMatches[1].Groups[1].Value.Trim();
+                    stiege = stiegeTuerMatches[0].Groups[1].Value.Trim();
+                    tuer = stiegeTuerMatches[1].Groups[1].Value.Trim();
                     break;
                 case 3:
-                    address.Block = stiegeTuerMatches[0].Groups[1].Value.Trim();
-                    address.Stiege = stiegeTuerMatches[1].Groups[1].Value.Trim();
-                    address.Tuer = stiegeTuerMatches[2].Groups[1].Value.Trim();
+                    block = stiegeTuerMatches[0].Groups[1].Value.Trim();
+                    stiege = stiegeTuerMatches[1].Groups[1].Value.Trim();
+                    tuer = stiegeTuerMatches[2].Groups[1].Value.Trim();
                     break;
-                case 0:
-                    break;
-                default: throw new FormatException("Address is in an invalid format!");
+                default: throw new FormatException(InvalidFormatMessage);
             }
 
-            return address;
+            return new(intermediateAddress.Strasse, intermediateAddress.HausnummerVon, intermediateAddress.HausnummerBis, block, stiege, tuer);
         }
     }
 }
